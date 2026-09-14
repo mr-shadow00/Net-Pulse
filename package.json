@@ -1,0 +1,17 @@
+{
+  "name": "netpulse",
+  "version": "1.0.0",
+  "description": "NetPulse - a self-hosted network speed monitor with separate Local and Global (overseas) speed tracking, on a schedule.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "@m-lab/ndt7": "^0.0.6"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>NetPulse</title>
+<meta name="theme-color" content="#0d1117" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 20.5c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5-1.5.67-1.5 1.5.67 1.5 1.5 1.5Z" fill="currentColor"/>
+      <path d="M8.5 15.5a5 5 0 0 1 7 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M5 12a10 10 0 0 1 14 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+      <path d="M1.8 8.8a15 15 0 0 1 20.4 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.4"/>
+    </svg>
+    <span>NetPulse</span>
+    <span class="running-indicator" id="running-indicator" hidden>
+      <span class="running-dot"></span>
+      <span id="running-indicator-text">Running…</span>
+    </span>
+  </div>
+  <nav class="tabs">
+    <button class="tab-btn active" data-view="dashboard">Dashboard</button>
+    <button class="tab-btn" data-view="settings">Settings</button>
+  </nav>
+</header>
+
+<main id="app">
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <section id="view-dashboard" class="view active">
+
+    <div class="page-header">
+      <div>
+        <h1>Latest Run</h1>
+        <p class="muted" id="last-run-text">No tests yet</p>
+      </div>
+      <div class="run-now">
+        <button class="btn btn-primary" id="run-both-btn">Run test now</button>
+        <div class="dropdown">
+          <button class="btn btn-icon" id="run-dropdown-toggle" aria-label="More run options">⋮</button>
+          <div class="dropdown-menu" id="run-dropdown-menu">
+            <button data-run="local">Run Local only</button>
+            <button data-run="global">Run Global only</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Local summary -->
+    <div class="group-heading">
+      <span class="dot dot-local"></span>
+      <h2>Local Network</h2>
+      <span class="muted small" id="local-server-name"></span>
+    </div>
+    <div class="stat-grid" id="local-stats">
+      <div class="stat-card" data-metric="latency">
+        <div class="stat-label">⚡ Latency</div>
+        <div class="stat-value"><span class="v">—</span><span class="unit">ms</span></div>
+        <div class="stat-sub">Average: <span class="avg">—</span></div>
+      </div>
+      <div class="stat-card" data-metric="download">
+        <div class="stat-label">⬇ Download</div>
+        <div class="stat-value"><span class="v">—</span><span class="unit">Mbps</span></div>
+        <div class="stat-sub">Average: <span class="avg">—</span></div>
+      </div>
+      <div class="stat-card" data-metric="upload">
+        <div class="stat-label">⬆ Upload</div>
+        <div class="stat-value"><span class="v">—</span><span class="unit">Mbps</span></div>
+        <div class="stat-sub">Average: <span class="avg">—</span></div>
+      </div>
+      <div class="stat-card" data-metric="jitter">
+        <div class="stat-label">〰 Jitter</div>
+        <div class="stat-value"><span class="v">—</span><span class="unit">ms</span></div>
+        <div class="stat-sub">Average: <span class="avg">—</span></div>
+      </div>
+    </div>
+
+    <!-- Global summary -->
+    <div class="group-heading">
+      <span class="dot dot-global"></span>
+      <h2>Global Internet (overseas)</h2>
+      <span class="muted small" id="global-server-name"></span>
+    </div>
+    <div class="stat-grid" id="global-stats">
+      <div class="stat-card" data-metric="latency">
+        <div class="stat-label">⚡ Latency</div>
+        <div class="stat-value"><span class="v">—</span><span class="unit">ms</span></div>
+        <div class="stat-sub">Average: <span class="avg">—</span></div>
+      </div>
+      <div class="stat-card" data-metric="download">
+        <div class="stat-label">⬇ Download</div>
+        <div class="stat-value"><span class="v">—</span><span class="unit">Mbps</span></div>
+        <div class="stat-sub">Average: <span class="avg">—</span></div>
+      </div>
+      <div class="stat-card" data-metric="upload">
+        <div class="stat-label">⬆ Upload</div>
+        <div class="stat-value"><span class="v">—</span><span class="unit">Mbps</span></div>
+        <div class="stat-sub">Average: <span class="avg">—</span></div>
+      </div>
+      <div class="stat-card" data-metric="jitter">
+        <div class="stat-label">〰 Jitter</div>
+        <div class="stat-value"><span class="v">—</span><span class="unit">ms</span></div>
+        <div class="stat-sub">Average: <span class="avg">—</span></div>
+      </div>
+    </div>
+
+    <!-- Local chart -->
+    <div class="panel" data-chart-panel="local">
+      <div class="panel-header">
+        <h3><span class="dot dot-local"></span> Local Speed Test History</h3>
+        <div class="panel-controls">
+          <div class="legend-toggles" data-series-toggles="local">
+            <button class="legend-btn active" data-key="download" style="--c:#4c8dff">Download</button>
+            <button class="legend-btn active" data-key="upload" style="--c:#22c55e">Upload</button>
+            <button class="legend-btn active" data-key="latency" style="--c:#eab308">Latency</button>
+            <button class="legend-btn active" data-key="jitter" style="--c:#a855f7">Jitter</button>
+          </div>
+          <select class="range-select" data-range-for="local">
+            <option value="1h">1 Hour</option>
+            <option value="24h">24 Hours</option>
+            <option value="7d" selected>1 Week</option>
+            <option value="30d">1 Month</option>
+            <option value="90d">3 Months</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
+      </div>
+      <div class="chart-container" id="chart-local"></div>
+    </div>
+
+    <!-- Global chart -->
+    <div class="panel" data-chart-panel="global">
+      <div class="panel-header">
+        <h3><span class="dot dot-global"></span> Global Speed Test History</h3>
+        <div class="panel-controls">
+          <div class="legend-toggles" data-series-toggles="global">
+            <button class="legend-btn active" data-key="download" style="--c:#4c8dff">Download</button>
+            <button class="legend-btn active" data-key="upload" style="--c:#22c55e">Upload</button>
+            <button class="legend-btn active" data-key="latency" style="--c:#eab308">Latency</button>
+            <button class="legend-btn active" data-key="jitter" style="--c:#a855f7">Jitter</button>
+          </div>
+          <select class="range-select" data-range-for="global">
+            <option value="1h">1 Hour</option>
+            <option value="24h">24 Hours</option>
+            <option value="7d" selected>1 Week</option>
+            <option value="30d">1 Month</option>
+            <option value="90d">3 Months</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
+      </div>
+      <div class="chart-container" id="chart-global"></div>
+    </div>
+
+    <!-- Recent tests table -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Recent Speed Tests</h3>
+      </div>
+      <div class="table-controls">
+        <input type="text" id="table-filter" placeholder="Filter by server…" />
+        <select id="table-type-filter">
+          <option value="all">All types</option>
+          <option value="local">Local only</option>
+          <option value="global">Global only</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="tests-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Date</th>
+              <th>Server</th>
+              <th>Latency</th>
+              <th>Jitter</th>
+              <th>Download</th>
+              <th>Upload</th>
+            </tr>
+          </thead>
+          <tbody id="tests-tbody">
+            <tr><td colspan="7" class="muted center">No tests yet — hit "Run test now" above.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ===================== SETTINGS ===================== -->
+  <section id="view-settings" class="view">
+    <div class="page-header">
+      <div>
+        <h1>Settings</h1>
+        <p class="muted">Both tests auto-select their own server — nothing to configure there. Just set how often they run below.</p>
+      </div>
+    </div>
+
+    <div class="panel form-panel">
+      <h3><span class="dot dot-local"></span> Local — Cloudflare Speedtest</h3>
+      <p class="muted small">
+        Uses <em>Cloudflare's public speed test endpoints</em> — the same ones behind
+        speed.cloudflare.com. Cloudflare's network is anycast, so this hostname always
+        automatically routes to whichever of their edge locations is nearest/fastest —
+        no server selection needed, and no separate binary to download.
+      </p>
+    </div>
+
+    <div class="panel form-panel">
+      <h3><span class="dot dot-global"></span> Global — M-Lab NDT7 (Google-powered)</h3>
+      <p class="muted small">
+        Uses the <em>NDT7</em> protocol from Measurement Lab (M-Lab) — the same underlying
+        tech behind Google's own "speed test" pop-up — deliberately independent infrastructure
+        from Cloudflare, so a problem with one can't take down both tests. Picks the best
+        server outside your own country automatically, falling back through a few candidates
+        if one doesn't respond. Worth knowing: M-Lab is a public research platform and
+        publishes collected results for internet research — see their
+        <a href="https://www.measurementlab.net/privacy/" target="_blank" rel="noopener">privacy policy</a>.
+      </p>
+    </div>
+
+    <div class="panel form-panel">
+      <h3>Schedule</h3>
+      <div class="form-row form-row-inline">
+        <label class="switch">
+          <input type="checkbox" id="schedule-enabled" />
+          <span class="slider"></span>
+        </label>
+        <span>Run automatically</span>
+      </div>
+      <div class="form-row">
+        <label>Every</label>
+        <select id="schedule-interval">
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60" selected>1 hour</option>
+          <option value="180">3 hours</option>
+          <option value="360">6 hours</option>
+          <option value="720">12 hours</option>
+          <option value="1440">24 hours</option>
+        </select>
+      </div>
+      <p class="muted small">Each scheduled run tests both Local and Global back to back.</p>
+    </div>
+
+    <div class="panel form-panel">
+      <h3>History</h3>
+      <div class="form-row">
+        <label>Keep history for</label>
+        <input type="number" id="retention-days" min="1" max="3650" /> <span class="muted small">days</span>
+      </div>
+    </div>
+
+    <div class="panel form-panel">
+      <div class="form-row-actions">
+        <button class="btn btn-primary" id="save-settings-btn">Save settings</button>
+        <span class="test-result" id="save-result"></span>
+      </div>
+    </div>
+
+    <div class="panel form-panel danger-zone">
+      <h3>Danger zone</h3>
+      <div class="form-row-actions">
+        <button class="btn btn-danger" id="clear-history-btn">Clear all history</button>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/js/chart.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
