@@ -3,10 +3,10 @@
 // manual "Run test now" API route and the background scheduler.
 //
 // Local and Global deliberately use two completely independent engines:
-//   - Local  -> Cloudflare's public speed test endpoints
-//               (cloudflareSpeedtest.js) — anycast, so the same hostname
-//               always automatically routes to the nearest/fastest edge,
-//               with zero server selection needed on our end.
+//   - Local  -> Ookla's official Speedtest CLI (ooklaSpeedtest.js), which
+//               picks the nearest server; falls back to Cloudflare's public
+//               endpoints (cloudflareSpeedtest.js) if Ookla can't run
+//               (see localSpeedtest.js).
 //   - Global -> M-Lab's NDT7 protocol (mlabSpeedtest.js) — the tech behind
 //               Google's own speed-test pop-up, excluding your own
 //               country so it's a genuine overseas measurement.
@@ -17,9 +17,11 @@
 // running them concurrently would have both tests fighting over the same
 // uplink/downlink, making both readings unreliable.
 
-const { withLock, save, genId } = require('./db');
-const { runCloudflareTest } = require('./cloudflareSpeedtest');
+const { withLock, save, load, genId } = require('./db');
+const { runLocalTest } = require('./localSpeedtest');
 const { runMLabTest } = require('./mlabSpeedtest');
+
+const MAX_RECENT_SERVERS = 8;
 
 function pruneOldTests(db) {
   const days = Number(db.settings.retentionDays) || 90;
@@ -27,11 +29,21 @@ function pruneOldTests(db) {
   db.tests = db.tests.filter((t) => new Date(t.timestamp).getTime() >= cutoff);
 }
 
+/** Remembers a Global (M-Lab) server that just worked, so it gets tried
+ * first next time — most-recent-first, deduplicated, capped in size. */
+function rememberRecentServer(db, { machine, name, country }) {
+  if (!machine) return;
+  const existing = (db.settings.globalRecentServers || []).filter((s) => s.machine !== machine);
+  existing.unshift({ machine, name: name || null, country: country || null, lastSuccessAt: new Date().toISOString() });
+  db.settings.globalRecentServers = existing.slice(0, MAX_RECENT_SERVERS);
+}
+
 async function runEngine(type) {
-  const runFn = type === 'local' ? runCloudflareTest : runMLabTest;
-  const fallbackLabel = type === 'local' ? 'Cloudflare Speedtest' : 'M-Lab NDT7';
+  const fallbackLabel = type === 'local' ? 'Local speed test' : 'M-Lab NDT7';
   try {
-    const result = await runFn();
+    const result = type === 'local'
+      ? await runLocalTest()
+      : await runMLabTest((load().settings.globalRecentServers || []).map((s) => s.machine));
     return {
       serverLabel: result.serverLabel || fallbackLabel,
       serverUrl: result.serverUrl || '',
@@ -70,6 +82,9 @@ async function runAndRecord(type) {
     db.tests.push(record);
     db.tests.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     pruneOldTests(db);
+    if (type === 'global' && record.success && outcome.serverUrl) {
+      rememberRecentServer(db, { machine: outcome.serverUrl, name: outcome.serverLabel });
+    }
     save(db);
   });
 

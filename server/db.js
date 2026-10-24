@@ -21,7 +21,18 @@ function defaultData() {
         enabled: false,
         intervalMinutes: 60
       },
-      retentionDays: 90
+      retentionDays: 90,
+      // What the customer is paying their ISP for, in Mbps. null = not set.
+      // Drives the plan reference line on the charts, the health colours on
+      // the stat cards, and the scale of the speedometer.
+      ispPlan: {
+        local: { download: null, upload: null },  // BDIX / local-network plan
+        global: { download: null, upload: null }  // international internet plan
+      },
+      // Servers that have worked for a Global (M-Lab) run recently,
+      // most-recent-first — tried first on future runs before falling
+      // through the rest of M-Lab's ranked list. See mlabSpeedtest.js.
+      globalRecentServers: [] // { machine, name, country, lastSuccessAt }
     },
     tests: [] // { id, type: 'local'|'global', timestamp, serverLabel, serverUrl, download, upload, latency, jitter, success, error }
   };
@@ -29,6 +40,22 @@ function defaultData() {
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function cleanPlan(p) {
+  return {
+    download: p && p.download > 0 ? p.download : null,
+    upload: p && p.upload > 0 ? p.upload : null
+  };
+}
+
+// Plans used to be a single {download, upload} pair; they're now one pair per
+// test type. An old single pair is copied to both so nothing is lost.
+function migratePlan(old) {
+  old = old || {};
+  const isFlat = !old.local && !old.global && ('download' in old || 'upload' in old);
+  if (isFlat) return { local: cleanPlan(old), global: cleanPlan(old) };
+  return { local: cleanPlan(old.local), global: cleanPlan(old.global) };
 }
 
 function migrate(data) {
@@ -40,7 +67,9 @@ function migrate(data) {
   const settings = data.settings || {};
   data.settings = {
     schedule: Object.assign({}, fresh.schedule, settings.schedule || {}),
-    retentionDays: settings.retentionDays || fresh.retentionDays
+    retentionDays: settings.retentionDays || fresh.retentionDays,
+    ispPlan: migratePlan(settings.ispPlan),
+    globalRecentServers: Array.isArray(settings.globalRecentServers) ? settings.globalRecentServers : []
   };
   if (!Array.isArray(data.tests)) data.tests = [];
   return data;

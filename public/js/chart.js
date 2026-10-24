@@ -24,6 +24,8 @@ function el(tag, attrs = {}) {
  */
 function renderChart(container, opts) {
   const { points, series, leftLabel, rightLabel, visible, errorIndices } = opts;
+  // Reference lines (e.g. the ISP plan speed) — only for series that are toggled on.
+  const refLines = (opts.refLines || []).filter((r) => r.value > 0 && visible[r.key] !== false);
   container.innerHTML = '';
 
   if (!points.length) {
@@ -44,7 +46,7 @@ function renderChart(container, opts) {
   const leftSeries = shown.filter((s) => s.axis === 'left');
   const rightSeries = shown.filter((s) => s.axis === 'right');
 
-  const leftMax = niceMax(maxOf(leftSeries));
+  const leftMax = niceMax(Math.max(maxOf(leftSeries), ...refLines.map((r) => r.value)));
   const rightMax = niceMax(maxOf(rightSeries));
 
   const n = points.length;
@@ -134,6 +136,16 @@ function renderChart(container, opts) {
     });
   });
 
+  // Reference lines (ISP plan): dashed horizontal line across the plot
+  // drawn over the series so it's always visible (no text label on the line).
+  refLines.forEach((r, idx) => {
+    const y = yAtLeft(r.value);
+    svg.appendChild(el('line', {
+      x1: padding.left, x2: width - padding.right, y1: y, y2: y,
+      stroke: r.color, 'stroke-width': '1.5', 'stroke-dasharray': '8,5', opacity: '0.9'
+    }));
+  });
+
   // Vertical markers at each failed test, so it's clear exactly where a
   // gap in the data came from an error rather than just missing data.
   if (Array.isArray(errorIndices)) {
@@ -197,7 +209,9 @@ function renderChart(container, opts) {
       const v = s.values[idx];
       const unit = s.axis === 'left' ? 'Mbps' : 'ms';
       return `<div class="chart-tooltip-row"><span class="dot" style="background:${s.color}"></span>${s.label}: <b>${v == null ? '—' : v}</b> ${unit}</div>`;
-    }).join('');
+    }).join('') + refLines.map((r) =>
+      `<div class="chart-tooltip-row chart-tooltip-plan"><span class="dot" style="background:${r.color}"></span>${r.label}</div>`
+    ).join('');
     const isError = Array.isArray(errorIndices) && errorIndices.includes(idx);
     const errorRow = isError ? '<div class="chart-tooltip-row chart-tooltip-error">⚠ Test failed at this point</div>' : '';
     tooltip.innerHTML = `<div class="chart-tooltip-title">${points[idx].fullLabel || points[idx].label}</div>${rows}${errorRow}`;

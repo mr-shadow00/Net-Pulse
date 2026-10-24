@@ -68,6 +68,44 @@
     return `${days}d ago`;
   }
 
+  // ---------------- ISP plan + health ----------------
+  // Tweak these to taste. Speed is judged against your ISP plan; latency and
+  // jitter use fixed thresholds ([good up to, okay up to] in ms — above is bad).
+  // Global is an overseas test, so its latency/jitter allowances are looser.
+  const HEALTH = {
+    speed: { good: 0.8, warn: 0.5 }, // fraction of plan speed
+    latency: { local: [40, 100], global: [150, 250] },
+    jitter: { local: [10, 30], global: [25, 60] }
+  };
+
+  // type: 'local' (BDIX) | 'global' (internet); metric: 'download' | 'upload'
+  function planFor(type, metric) {
+    const p = state.settings && state.settings.ispPlan && state.settings.ispPlan[type];
+    const v = p ? p[metric] : null;
+    return v > 0 ? v : null;
+  }
+  function anyPlanSet() {
+    return ['local', 'global'].some((t) => planFor(t, 'download') || planFor(t, 'upload'));
+  }
+
+  // Returns 'good' | 'warn' | 'bad' | null (null = nothing to judge against)
+  function healthOf(type, metric, value) {
+    if (value == null || Number.isNaN(value)) return null;
+    if (metric === 'download' || metric === 'upload') {
+      const plan = planFor(type, metric);
+      if (!plan) return null;
+      const f = value / plan;
+      return f >= HEALTH.speed.good ? 'good' : f >= HEALTH.speed.warn ? 'warn' : 'bad';
+    }
+    const [good, warn] = HEALTH[metric][type];
+    return value <= good ? 'good' : value <= warn ? 'warn' : 'bad';
+  }
+
+  function setHealthClass(node, health) {
+    node.classList.remove('health-good', 'health-warn', 'health-bad');
+    if (health) node.classList.add('health-' + health);
+  }
+
   // ---------------- Dashboard: stat cards ----------------
   async function loadStats() {
     const [latest, summary] = await Promise.all([
@@ -77,6 +115,9 @@
 
     fillStatGroup('local', latest.local, summary.local);
     fillStatGroup('global', latest.global, summary.global);
+    updateGauges('local', latest.local);
+    updateGauges('global', latest.global);
+    $('#plan-hint').hidden = anyPlanSet();
 
     const times = [latest.local, latest.global].filter(Boolean).map((t) => new Date(t.timestamp).getTime());
     if (times.length) {
@@ -108,7 +149,51 @@
       const avgVal = summary ? summary[metric] : null;
       const unit = metric === 'download' || metric === 'upload' ? 'Mbps' : 'ms';
       avgEl.textContent = avgVal != null ? `${fmt(avgVal)} ${unit}` : '—';
+
+      // Health colour (a failed run counts as bad)
+      const ok = latest && latest.success;
+      setHealthClass(card, latest && !latest.success ? 'bad' : (ok ? healthOf(type, metric, latest[metric]) : null));
+
+      // "82% of 500 Mbps plan" line under the speed cards
+      if (metric === 'download' || metric === 'upload') {
+        let planEl = card.querySelector('.stat-plan');
+        if (!planEl) {
+          planEl = document.createElement('div');
+          planEl.className = 'stat-plan';
+          card.appendChild(planEl);
+        }
+        const plan = planFor(type, metric);
+        if (ok && plan) {
+          planEl.textContent = `${Math.round((latest[metric] / plan) * 100)}% of ${fmt(plan)} Mbps plan`;
+          planEl.hidden = false;
+        } else {
+          planEl.hidden = true;
+        }
+      }
     });
+  }
+
+
+  // ---------------- Speedometers ----------------
+  // Two small dials per network (download = blue, upload = green). They show
+  // the latest *finished* result only — nothing moves while a test runs.
+  const gauges = {};
+  function updateGauges(type, latest) {
+    const card = $(`.gauge-card[data-gauge="${type}"]`);
+    const ok = latest && latest.success;
+    ['download', 'upload'].forEach((metric) => {
+      const col = $(`.gauge-col[data-metric="${metric}"]`, card);
+      const key = `${type}-${metric}`;
+      if (!gauges[key]) gauges[key] = window.NetPulseGauge.create($('.gauge-svg', col));
+      const value = ok ? latest[metric] : null;
+      const plan = planFor(type, metric);
+      window.NetPulseGauge.update(gauges[key], value, plan);
+      $('.gauge-plan-note', col).textContent =
+        value != null && plan ? `${Math.round((value / plan) * 100)}% of ${fmt(plan)} Mbps plan`
+        : plan ? `Plan: ${fmt(plan)} Mbps` : '';
+    });
+    $('.g-latency', card).textContent = ok && latest.latency != null ? `${fmt(latest.latency)} ms` : '—';
+    $('.g-jitter', card).textContent = ok && latest.jitter != null ? `${fmt(latest.jitter)} ms` : '—';
   }
 
   // ---------------- Charts ----------------
@@ -145,7 +230,13 @@
       leftLabel: 'Speed (Mbps)',
       rightLabel: 'Latency / Jitter (ms)',
       visible: state.visible[type],
-      errorIndices
+      errorIndices,
+      refLines: ['download', 'upload'].filter((k) => planFor(type, k)).map((k) => ({
+        key: k,
+        value: planFor(type, k),
+        color: seriesDefs.find((d) => d.key === k).color,
+        label: `ISP plan (${k}) · ${fmt(planFor(type, k))} Mbps`
+      }))
     });
   }
 
@@ -174,11 +265,12 @@
     renderTable();
   }
 
+  let tableTypeFilter = 'all';
+
   function renderTable() {
     const filterText = $('#table-filter').value.trim().toLowerCase();
-    const typeFilter = $('#table-type-filter').value;
     const rows = allTests.filter((t) => {
-      if (typeFilter !== 'all' && t.type !== typeFilter) return false;
+      if (tableTypeFilter !== 'all' && t.type !== tableTypeFilter) return false;
       if (filterText && !(t.serverLabel || '').toLowerCase().includes(filterText)) return false;
       return true;
     });
@@ -216,7 +308,13 @@
   }
 
   $('#table-filter').addEventListener('input', renderTable);
-  $('#table-type-filter').addEventListener('change', renderTable);
+  $$('#table-type-filter .type-segment').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      tableTypeFilter = btn.dataset.type;
+      $$('#table-type-filter .type-segment').forEach((b) => b.classList.toggle('active', b === btn));
+      renderTable();
+    });
+  });
 
   // ---------------- Run now ----------------
   async function runTests(type) {
@@ -249,7 +347,15 @@
     $('#schedule-enabled').checked = !!s.schedule.enabled;
     $('#schedule-interval').value = String(s.schedule.intervalMinutes || 60);
     $('#retention-days').value = s.retentionDays;
+    ['local', 'global'].forEach((t) => {
+      ['download', 'upload'].forEach((k) => {
+        const v = s.ispPlan && s.ispPlan[t] ? s.ispPlan[t][k] : null;
+        $(`#plan-${t}-${k}`).value = v || '';
+      });
+    });
   }
+
+  const planInput = (t, k) => ($(`#plan-${t}-${k}`).value === '' ? null : Number($(`#plan-${t}-${k}`).value));
 
   $('#save-settings-btn').addEventListener('click', async () => {
     const payload = {
@@ -257,7 +363,11 @@
         enabled: $('#schedule-enabled').checked,
         intervalMinutes: Number($('#schedule-interval').value)
       },
-      retentionDays: Number($('#retention-days').value)
+      retentionDays: Number($('#retention-days').value),
+      ispPlan: {
+        local: { download: planInput('local', 'download'), upload: planInput('local', 'upload') },
+        global: { download: planInput('global', 'download'), upload: planInput('global', 'upload') }
+      }
     };
     const resultEl = $('#save-result');
     try {
@@ -265,6 +375,7 @@
       resultEl.textContent = 'Saved ✓';
       resultEl.className = 'test-result ok';
       toast('Settings saved.');
+      refreshDashboard(); // plan changes affect the dials, cards and chart lines
     } catch (e) {
       resultEl.textContent = e.message;
       resultEl.className = 'test-result err';
@@ -303,6 +414,7 @@
       const label = status.type === 'both' ? 'Running Global + Local…' : `Running ${status.type}…`;
       textEl.textContent = label;
     }
+
     if (wasRunning && !status.running) {
       // A run (possibly scheduled, possibly from another tab/device) just
       // finished — refresh so results show up without waiting a full minute.

@@ -54,6 +54,52 @@
       </div>
     </div>
 
+
+    <!-- Speedometers (latest finished result: download + upload per network) -->
+    <div class="gauge-row">
+      <div class="gauge-card" data-gauge="local">
+        <div class="gauge-title"><span class="dot dot-local"></span> Local Network</div>
+        <div class="gauge-pair">
+          <div class="gauge-col" data-metric="download">
+            <div class="gauge-label">⬇ Download</div>
+            <div class="gauge-svg"></div>
+            <div class="gauge-plan-note muted small"></div>
+          </div>
+          <div class="gauge-col" data-metric="upload">
+            <div class="gauge-label">⬆ Upload</div>
+            <div class="gauge-svg"></div>
+            <div class="gauge-plan-note muted small"></div>
+          </div>
+        </div>
+        <div class="gauge-meta">
+          <div><span class="k">⚡ Ping</span><b class="g-latency">—</b></div>
+          <div><span class="k">〰 Jitter</span><b class="g-jitter">—</b></div>
+        </div>
+      </div>
+      <div class="gauge-card" data-gauge="global">
+        <div class="gauge-title"><span class="dot dot-global"></span> Global Internet</div>
+        <div class="gauge-pair">
+          <div class="gauge-col" data-metric="download">
+            <div class="gauge-label">⬇ Download</div>
+            <div class="gauge-svg"></div>
+            <div class="gauge-plan-note muted small"></div>
+          </div>
+          <div class="gauge-col" data-metric="upload">
+            <div class="gauge-label">⬆ Upload</div>
+            <div class="gauge-svg"></div>
+            <div class="gauge-plan-note muted small"></div>
+          </div>
+        </div>
+        <div class="gauge-meta">
+          <div><span class="k">⚡ Ping</span><b class="g-latency">—</b></div>
+          <div><span class="k">〰 Jitter</span><b class="g-jitter">—</b></div>
+        </div>
+      </div>
+    </div>
+    <p class="muted small gauge-hint" id="plan-hint" hidden>
+      Set your ISP plan speeds in <b>Settings</b> to show the plan marker on the dials and health-coloured cards.
+    </p>
+
     <!-- Local summary -->
     <div class="group-heading">
       <span class="dot dot-local"></span>
@@ -167,11 +213,13 @@
       </div>
       <div class="table-controls">
         <input type="text" id="table-filter" placeholder="Filter by server…" />
-        <select id="table-type-filter">
-          <option value="all">All types</option>
-          <option value="local">Local only</option>
-          <option value="global">Global only</option>
-        </select>
+      </div>
+      <div class="table-controls table-controls-center">
+        <div class="type-segmented" id="table-type-filter" role="group" aria-label="Filter by type">
+          <button type="button" class="type-segment active" data-type="all">All</button>
+          <button type="button" class="type-segment" data-type="local">Local</button>
+          <button type="button" class="type-segment" data-type="global">Global</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table class="tests-table">
@@ -205,12 +253,16 @@
     </div>
 
     <div class="panel form-panel">
-      <h3><span class="dot dot-local"></span> Local — Cloudflare Speedtest</h3>
+      <h3><span class="dot dot-local"></span> Local — Ookla Speedtest</h3>
       <p class="muted small">
-        Uses <em>Cloudflare's public speed test endpoints</em> — the same ones behind
-        speed.cloudflare.com. Cloudflare's network is anycast, so this hostname always
-        automatically routes to whichever of their edge locations is nearest/fastest —
-        no server selection needed, and no separate binary to download.
+        Uses the official <em>Ookla Speedtest CLI</em> (the engine behind speedtest.net), which
+        automatically picks the nearest server — including ISP-hosted local ones — so this
+        reflects your real local speed. The small program is downloaded automatically the
+        first time and kept in the data folder. If Ookla can't run, or the nearest server isn't
+        actually local, it falls back to Cloudflare so a run still gives a result. The History
+        table shows which one ran. By running it you accept Ookla's
+        <a href="https://www.speedtest.net/about/eula" target="_blank" rel="noopener">licence</a>
+        (personal, non-commercial use).
       </p>
     </div>
 
@@ -225,6 +277,32 @@
         publishes collected results for internet research — see their
         <a href="https://www.measurementlab.net/privacy/" target="_blank" rel="noopener">privacy policy</a>.
       </p>
+    </div>
+
+    <div class="panel form-panel">
+      <h3><span class="dot dot-local"></span> ISP Plan — Local (BDIX)</h3>
+      <p class="muted small">The BDIX / local-network speed your ISP gives you. Used for the Local dial, cards and chart line. Leave blank to turn it off.</p>
+      <div class="form-row">
+        <label>Download speed</label>
+        <input type="number" id="plan-local-download" min="1" step="any" placeholder="e.g. 500" /> <span class="muted small">Mbps</span>
+      </div>
+      <div class="form-row">
+        <label>Upload speed</label>
+        <input type="number" id="plan-local-upload" min="1" step="any" placeholder="e.g. 500" /> <span class="muted small">Mbps</span>
+      </div>
+    </div>
+
+    <div class="panel form-panel">
+      <h3><span class="dot dot-global"></span> ISP Plan — Global (Internet)</h3>
+      <p class="muted small">The international internet speed your ISP gives you. Used for the Global dial, cards and chart line. Leave blank to turn it off.</p>
+      <div class="form-row">
+        <label>Download speed</label>
+        <input type="number" id="plan-global-download" min="1" step="any" placeholder="e.g. 100" /> <span class="muted small">Mbps</span>
+      </div>
+      <div class="form-row">
+        <label>Upload speed</label>
+        <input type="number" id="plan-global-upload" min="1" step="any" placeholder="e.g. 100" /> <span class="muted small">Mbps</span>
+      </div>
     </div>
 
     <div class="panel form-panel">
@@ -280,6 +358,7 @@
 <div id="toast" class="toast"></div>
 
 <script src="/js/chart.js"></script>
+<script src="/js/gauge.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

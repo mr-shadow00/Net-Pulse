@@ -8,11 +8,16 @@ deliberately use two **completely independent** engines on separate
 infrastructure, so a problem with one (a rate limit, a temporary block, an
 outage) can never take down both at once:
 
-- **Local test** — uses **Cloudflare's public speed test endpoints**, the
-  same ones behind speed.cloudflare.com. Cloudflare's network is anycast,
-  so the same hostname always automatically routes to whichever of their
-  edge locations is nearest/fastest for this connection — no server list,
-  no selection logic, and no separate binary to download.
+- **Local test** — uses the official **Ookla Speedtest CLI** (the engine
+  behind speedtest.net), which automatically picks the nearest server,
+  including ISP-hosted local ones, so you get a true local (e.g. BDIX)
+  reading. The CLI is downloaded automatically on first use into the data
+  folder (`data/bin`) and reused after that. Ookla's licence allows this for
+  personal, non-commercial use, and NetPulse accepts it on your behalf. If
+  Ookla can't run, or the nearest server is more than 60 ms away (not
+  really local), the Local test falls back to Cloudflare's public speed test
+  endpoints, so a run still produces a result. The server shown in the
+  History table tells you which one ran.
 - **Global test** — uses **NDT7**, the protocol from Measurement Lab
   (M-Lab), which is the same underlying tech behind Google's own "speed
   test" pop-up. Excludes any server in your own country and picks the
@@ -56,6 +61,24 @@ entry's country as "home," drops every candidate in that country, and
 tries the best few of what's left until one gives a full result — falling
 through to the next if a server is busy or doesn't respond.
 
+## How Global avoids wasting time on dead servers
+
+Three things work together to cut down on Global failures from busy or
+unreachable M-Lab servers:
+
+1. **More candidates per run** — up to 8 (not just the top few), so a
+   couple of bad servers in a row doesn't mean giving up.
+2. **A quick handshake check first** — before running a full ~20-second
+   download+upload test against a candidate, NetPulse opens a real
+   WebSocket connection to it for a few seconds to confirm it's actually
+   accepting connections. A dead or overloaded server gets ruled out in
+   a few seconds instead of chewing through most of the time budget.
+3. **Remembering what worked last time** — whichever server succeeded on
+   the most recent run(s) is tried *first* on the next one (up to 8
+   remembered, most-recent-first), since a server that worked recently is
+   a good bet to work again. This is separate from the dynamic ranked
+   list, so it still adapts automatically as conditions change.
+
 ## Automatic retry on failure
 
 If a scheduled run has a server hiccup, NetPulse waits 2 minutes and
@@ -69,6 +92,38 @@ clicks are always a single attempt, so the button responds immediately.
 A small pulsing badge appears next to "NetPulse" in the top bar whenever a
 test is actively running — manual or scheduled — and clears automatically
 when it finishes.
+
+## ISP plan, health colours and speedometer
+
+Under **Settings** there are two plan panels, because most ISPs sell two
+different speeds:
+
+- **ISP Plan — Local (BDIX)** — your BDIX / local-network speed
+- **ISP Plan — Global (Internet)** — your international internet speed
+
+Enter the download/upload speed for each. Once set (blank = off):
+
+- Each history chart gets a dashed **plan reference line** for its own plan.
+- The stat cards are **health-coloured** (green / yellow / red). Speeds are
+  judged against that network's plan (80%+ = green, 50-80% = yellow, below =
+  red); latency and jitter use fixed thresholds, looser for Global since it is
+  an overseas test. Thresholds live in the `HEALTH` object in `public/js/app.js`.
+- The **speedometers** at the top of the dashboard scale around each plan and
+  mark it with a dashed tick.
+
+An old single plan saved by a previous version is copied to both networks
+automatically.
+
+### Speedometers
+
+At the top of the dashboard each network (Local / Global) has a box with two
+small speedometers: **Download** (blue) and **Upload** (green), plus Ping and
+Jitter. They show the result of the **latest finished test** and update only
+after a test ends - nothing moves while a test is running.
+
+The dial scale uses fine, even steps (for example 0, 5, 10, 15 ... 50) so low
+speeds are easy to read. If a plan is set, a dashed tick marks it and the
+caption shows how much of the plan you got.
 
 ## Install on ZimaOS
 

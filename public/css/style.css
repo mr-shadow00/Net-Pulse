@@ -21,6 +21,8 @@
   --upload: #22c55e;
   --latency: #eab308;
   --jitter: #a855f7;
+  --good: #22c55e;
+  --warn: #eab308;
   --danger: #f26d6d;
   --danger-bg: rgba(242, 109, 109, 0.12);
   --radius-lg: 16px;
@@ -79,6 +81,7 @@ a { color: var(--local); }
   text-transform: none;
   letter-spacing: normal;
 }
+.running-indicator[hidden] { display: none; }
 .running-dot {
   width: 7px;
   height: 7px;
@@ -164,6 +167,64 @@ a { color: var(--local); }
 .stat-value .unit { font-size: 13px; color: var(--muted); margin-left: 4px; }
 .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
+
+/* ---------------- Health-coloured stat cards ---------------- */
+.stat-card { transition: border-color .2s ease, background .2s ease; }
+.stat-card.health-good { --h: var(--good); }
+.stat-card.health-warn { --h: var(--warn); }
+.stat-card.health-bad  { --h: var(--danger); }
+.stat-card.health-good, .stat-card.health-warn, .stat-card.health-bad {
+  border-color: color-mix(in srgb, var(--h) 45%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--h) 12%, var(--card)) 0%, var(--card) 80%);
+  box-shadow: var(--shadow-card), inset 3px 0 0 var(--h);
+}
+.stat-card.health-good .stat-value .v,
+.stat-card.health-warn .stat-value .v,
+.stat-card.health-bad  .stat-value .v { color: var(--h); }
+.stat-plan { font-size: 12px; margin-top: 3px; font-weight: 600; color: var(--h, var(--muted)); }
+
+/* ---------------- Speedometers ---------------- */
+.gauge-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: -8px; }
+.gauge-card {
+  background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg);
+  padding: 16px 18px 14px; box-shadow: var(--shadow-card);
+}
+.gauge-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.gauge-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.gauge-col { text-align: center; min-width: 0; }
+.gauge-col[data-metric="download"] { --g-color: var(--download); }
+.gauge-col[data-metric="upload"] { --g-color: var(--upload); }
+.gauge-label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--g-color); }
+.gauge-svg { max-width: 260px; margin: 12px auto 0; }
+.gauge-svg-el { width: 100%; height: auto; display: block; overflow: visible; }
+.gauge-track { fill: none; stroke: rgba(255,255,255,0.07); stroke-width: 9; stroke-linecap: round; }
+.gauge-value-arc {
+  fill: none; stroke: var(--g-color); stroke-width: 9; stroke-linecap: round;
+  transition: stroke-dashoffset 1s cubic-bezier(.22,.9,.3,1);
+  filter: drop-shadow(0 0 5px var(--g-color));
+}
+.gauge-tick { stroke: var(--muted); stroke-width: 1.2; }
+.gauge-tick-label { fill: var(--muted); font-size: 8.5px; font-family: var(--font-mono); }
+.gauge-plan-line { stroke: #fff; stroke-width: 1.8; stroke-dasharray: 3,2; opacity: .85; }
+.gauge-needle { transform-origin: 100px 88px; transition: transform 1s cubic-bezier(.22,.9,.3,1); }
+.gauge-needle-shape { fill: var(--text); }
+.gauge-hub { fill: var(--card); stroke: var(--text); stroke-width: 2.5; }
+.gauge-value-text { fill: var(--text); font-size: 22px; font-weight: 700; font-family: var(--font-mono); }
+.gauge-unit-text { fill: var(--muted); font-size: 9px; letter-spacing: .08em; }
+.gauge-plan-note { min-height: 16px; margin-top: 12px; font-size: 11.5px; }
+.gauge-meta {
+  display: flex; justify-content: space-around; gap: 8px; margin-top: 8px;
+  padding-top: 10px; border-top: 1px solid var(--card-border);
+}
+.gauge-meta > div { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; }
+.gauge-meta .k { color: var(--muted); }
+.gauge-meta b { font-family: var(--font-mono); font-size: 14px; }
+.gauge-hint { margin: 10px 2px 0; }
+
+/* Chart reference (ISP plan) line */
+.chart-ref-label { font-size: 10.5px; font-family: var(--font-mono); font-weight: 600; }
+.chart-tooltip-plan { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+
 /* ---------------- Panels / charts ---------------- */
 .panel {
   background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg);
@@ -218,6 +279,21 @@ a { color: var(--local); }
 /* ---------------- Table ---------------- */
 .table-controls { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .table-controls input { flex: 1; min-width: 180px; }
+.table-controls-center { justify-content: center; }
+
+.type-segmented {
+  display: inline-flex; gap: 4px; padding: 4px;
+  background: var(--bg-elevated); border: 1px solid var(--card-border); border-radius: 999px;
+}
+.type-segment {
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 13px; font-weight: 600; padding: 7px 20px; border-radius: 999px;
+  transition: background .15s ease, color .15s ease;
+}
+.type-segment:hover:not(.active) { color: var(--text); }
+.type-segment.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.type-segment[data-type="local"].active { color: var(--local); }
+.type-segment[data-type="global"].active { color: var(--global); }
 .table-wrap { overflow-x: auto; }
 .tests-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tests-table th {
@@ -277,6 +353,9 @@ a { color: var(--local); }
 /* ---------------- Responsive ---------------- */
 @media (max-width: 720px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .gauge-row { grid-template-columns: 1fr; }
+  .gauge-tick-label.odd { display: none; } /* keep the small dials readable on phones */
+  .gauge-tick-label { font-size: 10px; }
   .form-row { flex-direction: column; align-items: flex-start; }
   .form-row label { width: auto; }
   .form-row input, .form-row select { max-width: 100%; width: 100%; }

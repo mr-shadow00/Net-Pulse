@@ -9,7 +9,8 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.19.2",
-    "@m-lab/ndt7": "^0.0.6"
+    "@m-lab/ndt7": "^0.0.6",
+    "ws": "^8.5.0"
   },
   "engines": {
     "node": ">=18"

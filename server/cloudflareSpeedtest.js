@@ -24,6 +24,16 @@ const DOWNLOAD_DURATION_MS = 8000;
 const UPLOAD_DURATION_MS = 6000;
 const DOWNLOAD_CHUNK_BYTES = 25 * 1000 * 1000; // 25 MB per request
 const UPLOAD_CHUNK_BYTES = 4 * 1000 * 1000; // 4 MB per request
+// A single connection can't fill a fast line (one TCP stream is limited by
+// latency and window size, and uploads stall waiting for each reply), so the
+// main measurement uses several connections at once, like real speed tests.
+// Request rate stays about the same as the single-connection version. If the
+// multi-connection run fails for any reason, the original single-connection
+// code below is used instead.
+const DOWNLOAD_STREAMS = 4;
+const UPLOAD_STREAMS = 4;
+const UPLOAD_FIRST_CHUNK_BYTES = 2 * 1000 * 1000; // small first chunk so slow lines still measure
+const UPLOAD_PARALLEL_CHUNK_BYTES = 8 * 1000 * 1000;
 const PING_COUNT = 8; // first is discarded (connection warm-up)
 const PING_TIMEOUT_MS = 6000;
 const CONNECT_TIMEOUT_MS = 8000;
@@ -63,7 +73,7 @@ async function fetchTrace() {
 
 /** Repeatedly downloads chunks for `durationMs`, summing bytes actually
  * received, and returns a Mbps figure. */
-async function measureDownload(durationMs) {
+async function measureDownloadSingle(durationMs) {
   const start = performance.now();
   let bytes = 0;
 
@@ -100,7 +110,7 @@ async function measureDownload(durationMs) {
 
 /** Repeatedly uploads random buffers for `durationMs`, summing bytes sent,
  * and returns a Mbps figure. */
-async function measureUpload(durationMs) {
+async function measureUploadSingle(durationMs) {
   const payload = require('crypto').randomBytes(UPLOAD_CHUNK_BYTES);
   const start = performance.now();
   let bytes = 0;
@@ -137,6 +147,120 @@ async function measureUpload(durationMs) {
   const elapsedSec = (performance.now() - start) / 1000;
   if (elapsedSec <= 0 || bytes === 0) return 0;
   return (bytes * 8) / elapsedSec / 1e6; // Mbps
+}
+
+/** Multi-connection download: DOWNLOAD_STREAMS parallel streams share one
+ * byte counter for `durationMs`. Throws on any error so the caller can fall
+ * back to the single-connection version rather than report a skewed number. */
+async function measureDownloadParallel(durationMs) {
+  const start = performance.now();
+  let bytes = 0;
+  let failure = null;
+
+  async function worker() {
+    while (!failure && performance.now() - start < durationMs) {
+      const remaining = durationMs - (performance.now() - start);
+      if (remaining <= 0) break;
+      const url = `${DOWN_URL}?bytes=${DOWNLOAD_CHUNK_BYTES}&r=${Math.random()}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), Math.max(remaining, 250));
+      try {
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+        if (!res.ok || !res.body) throw new Error(`Download endpoint returned HTTP ${res.status}`);
+        const reader = res.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          bytes += value.length;
+          if (performance.now() - start >= durationMs) {
+            controller.abort();
+            break;
+          }
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') { failure = failure || e; return; }
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: DOWNLOAD_STREAMS }, worker));
+  if (failure) throw failure;
+  const elapsedSec = (performance.now() - start) / 1000;
+  if (elapsedSec <= 0 || bytes === 0) throw new Error('Download test received no data');
+  return (bytes * 8) / elapsedSec / 1e6; // Mbps
+}
+
+/** Multi-connection upload: UPLOAD_STREAMS parallel POST loops. Only fully
+ * delivered chunks count, measured up to the last one that finished. */
+async function measureUploadParallel(durationMs) {
+  const big = require('crypto').randomBytes(UPLOAD_PARALLEL_CHUNK_BYTES);
+  const start = performance.now();
+  let bytes = 0;
+  let lastDone = start;
+  let failure = null;
+
+  async function worker() {
+    let first = true;
+    while (!failure && performance.now() - start < durationMs) {
+      const remaining = durationMs - (performance.now() - start);
+      if (remaining <= 0) break;
+      const body = first ? big.subarray(0, UPLOAD_FIRST_CHUNK_BYTES) : big;
+      first = false;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), Math.max(remaining, 250));
+      try {
+        const res = await fetch(UP_URL, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body,
+          cache: 'no-store'
+        });
+        if (!res.ok) throw new Error(`Upload endpoint returned HTTP ${res.status}`);
+        if (res.body) {
+          const reader = res.body.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+        bytes += body.length;
+        lastDone = performance.now();
+      } catch (e) {
+        if (e.name !== 'AbortError') { failure = failure || e; return; }
+        // cut off mid-flight when time ran out — partial chunks aren't counted
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: UPLOAD_STREAMS }, worker));
+  if (failure) throw failure;
+  const elapsedSec = (lastDone - start) / 1000;
+  if (elapsedSec <= 0 || bytes === 0) throw new Error('Upload test received no data');
+  return (bytes * 8) / elapsedSec / 1e6; // Mbps
+}
+
+/** Multi-connection first; the original single-connection code is the safety net. */
+async function measureDownload(durationMs) {
+  try {
+    return await measureDownloadParallel(durationMs);
+  } catch (e) {
+    console.warn(`[local test] multi-connection download failed (${e.message}) — retrying with one connection`);
+    return measureDownloadSingle(durationMs);
+  }
+}
+
+async function measureUpload(durationMs) {
+  try {
+    return await measureUploadParallel(durationMs);
+  } catch (e) {
+    console.warn(`[local test] multi-connection upload failed (${e.message}) — retrying with one connection`);
+    return measureUploadSingle(durationMs);
+  }
 }
 
 /** Sends a handful of near-empty requests and times the round trip, the

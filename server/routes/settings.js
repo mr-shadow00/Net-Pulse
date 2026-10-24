@@ -24,6 +24,19 @@ module.exports = function createSettingsRouter({ onScheduleChanged }) {
           const n = Number(body.retentionDays);
           if (Number.isFinite(n) && n >= 1) db.settings.retentionDays = Math.round(n);
         }
+        if (body.ispPlan && typeof body.ispPlan === 'object') {
+          ['local', 'global'].forEach((type) => {
+            const incoming = body.ispPlan[type];
+            if (!incoming || typeof incoming !== 'object') return;
+            ['download', 'upload'].forEach((key) => {
+              if (!(key in incoming)) return;
+              const raw = incoming[key];
+              if (raw === null || raw === '') { db.settings.ispPlan[type][key] = null; return; }
+              const n = Number(raw);
+              if (Number.isFinite(n) && n > 0) db.settings.ispPlan[type][key] = Math.round(n * 100) / 100;
+            });
+          });
+        }
         save(db);
         return db.settings;
       });
